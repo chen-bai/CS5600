@@ -19,7 +19,7 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
-static struct semaphore sleep_sema;
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -105,7 +105,7 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
   list_init (&sleeping_list);
-  sema_init (&sleep_sema,1);
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -513,8 +513,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->original_priority = priority;
-  list_init(&t->lock_list);
   list_init(&t->wait_lock_list);
+  list_init(&t->lock_list);
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
@@ -651,12 +651,9 @@ thread_sleep (int64_t ticks) {
         //list_push_back (&sleeping_list, &cur->elems);
 	cur->status =THREAD_SLEEPING;
         cur->wake_time =timer_ticks()+ticks;
-        while(sleep_sema.value==0);
-        sleep_sema.value=0;
 	list_insert_ordered(&sleeping_list, &cur->elem,small,NULL);
-        sleep_sema.value=1;
         schedule ();
     }   
-    intr_set_level (old_level);
+  intr_set_level (old_level);
 }
 
