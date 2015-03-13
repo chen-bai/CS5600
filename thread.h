@@ -91,7 +91,7 @@ struct thread
     int priority;                       /* Priority. */
     int original_priority;
     struct list_elem allelem;           /* List element for all threads list. */
-
+    tid_t parent;
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct list lock_list;
@@ -104,6 +104,9 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
     int64_t wake_time;
+    struct child_process_elem *process;
+    struct list child_process_list;
+    struct file *file;
   };
 
 /* If false (default), use round-robin scheduler.
@@ -131,6 +134,7 @@ tid_t thread_tid (void);
 const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
+bool thread_exist(tid_t tid);
 void thread_yield (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
@@ -144,5 +148,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+bool
+thread_exist(tid_t tid);
 
 #endif /* threads/thread.h */

@@ -19,7 +19,7 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
-
+static struct semaphore sleep_sema;
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -105,7 +105,7 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
   list_init (&sleeping_list);
-
+  sema_init (&sleep_sema,1);
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -216,7 +216,9 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
-
+  //printf("%d\n",tid);
+  t->parent=thread_current()->tid;
+  t->process=create_child(tid);
   intr_set_level (old_level);
   
   /* Add to run queue. */
@@ -315,7 +317,6 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
-
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
@@ -333,7 +334,7 @@ thread_yield (void)
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level;
-  //msg("<1>");
+  //printf("<1>");
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
@@ -369,13 +370,23 @@ thread_foreach (thread_action_func *func, void *aux)
 void if_yield(void)
 {
   list_sort(&ready_list,big,NULL);
+   if (intr_context()&&!list_empty(&ready_list))
+     {
+      if (thread_current()->priority <list_entry(list_front(&ready_list),struct thread,elem)->priority||(++thread_ticks >= TIME_SLICE))
+         {
+            intr_yield_on_return();
+         }
+      return;
+      }
   if((!list_empty(&ready_list))&&(thread_current()->priority<list_entry(list_front(&ready_list),struct thread,elem)->priority)){
 	thread_yield();}
+  return;
 }
 void
 thread_set_priority (int new_priority) 
 {
    enum intr_level old_level;
+   old_level = intr_disable ();
    struct thread *cur=thread_current();
    if(cur->priority>new_priority&&(!list_empty(&cur->lock_list)))
    {
@@ -385,7 +396,6 @@ thread_set_priority (int new_priority)
    else
       cur->priority = new_priority;
    cur->original_priority = new_priority;
-   old_level = intr_disable ();
    if_yield();
    intr_set_level (old_level);
 }
@@ -513,8 +523,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->original_priority = priority;
-  list_init(&t->wait_lock_list);
   list_init(&t->lock_list);
+  list_init(&t->wait_lock_list);
+  list_init(&t->child_process_list);
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
@@ -591,6 +602,19 @@ thread_schedule_tail (struct thread *prev)
       palloc_free_page (prev);
     }
 }
+bool
+thread_exist(tid_t tid)
+{
+   struct list_elem *e=list_begin(&all_list);
+   while(e!=list_end(&all_list))
+   {
+      struct thread *t=list_entry (e,struct thread,allelem);
+      if(t->tid==tid)
+         return true;
+      e=list_next(e);
+   }
+   return false;
+}
 
 /* Schedules a new process.  At entry, interrupts must be off and
    the running process's state must have been changed from
@@ -646,14 +670,17 @@ void
 thread_sleep (int64_t ticks) {
     struct thread *cur = thread_current();
     enum intr_level old_level;
+    while(sleep_sema.value==0);
     old_level = intr_disable ();
     if (cur != idle_thread) {
         //list_push_back (&sleeping_list, &cur->elems);
 	cur->status =THREAD_SLEEPING;
         cur->wake_time =timer_ticks()+ticks;
+        sleep_sema.value=0;
 	list_insert_ordered(&sleeping_list, &cur->elem,small,NULL);
+        sleep_sema.value=1;
         schedule ();
     }   
-  intr_set_level (old_level);
+    intr_set_level (old_level);
 }
 
