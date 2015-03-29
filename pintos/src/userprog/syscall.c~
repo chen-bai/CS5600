@@ -25,7 +25,7 @@
 #include "filesys/directory.h"
 #define CODE_BASE ((void *) 0x08048000)
 struct file_elem *find_mapped_file(struct file *file);
-bool check_mmap_addr(void *upage);
+void check_mmap_addr(void *upage);
 void 
 munmap(mapid_t mapid);
 static void syscall_handler (struct intr_frame *);
@@ -465,27 +465,25 @@ void close_all(void)
    }
    return;
 }
-bool check_mmap_addr(void *upage)
+void check_mmap_addr(void *upage)
 {
-   if(upage>=PHYS_BASE||upage<CODE_BASE||pg_round_down(upage) != upage)
+   if(upage>=PHYS_BASE||upage<CODE_BASE||((uint32_t) upage % PGSIZE) != 0)
    {
-      return false;
+      return -1;
    }
-   if(find_spt(upage))
-      return false;
-   return true;
 }
 mapid_t mmap(int fd, void *upage)
 {
     //printf("mmap\n");
-    if(!check_mmap_addr(upage))
-       return -1;
+    check_mmap_addr(upage);
     lock_acquire(&file_lock);
     int length = filesize (fd);
     if(length<=0)
       return -1;
     struct file *mmap_file=find_file(thread_current()->process,fd);
     struct file *file=file_reopen(mmap_file);
+    if(find_mapped_file(file))
+      return -1;
     if(!file)
     {
       return -1;
@@ -537,10 +535,10 @@ void munmap(mapid_t mapid)
 {
    struct thread *cur=thread_current();
    struct list_elem *e=list_begin(&cur->mmap_list);
-   //printf("<5>\n");
+   printf("<5>\n");
    while(e!=list_end(&cur->mmap_list))
    {
-      //printf("<6>\n");
+      printf("<6>\n");
       struct mmap_elem *mmap=list_entry(e,struct mmap_elem,elem);
       e=list_next(e);
       if(mapid==mmap->mapid)
@@ -548,11 +546,9 @@ void munmap(mapid_t mapid)
          struct frame_elem *frame=mmap->spt->frame;
          if(frame->load)
          {
-            if(pagedir_is_dirty(thread_current()->pagedir,mmap->spt->upage))
+            if(pagedir_is_dirty(thread_current()->pagedir,frame->kpage)&&mmap->writable)
             {
-               //printf("sb\n");
-	       int n=file_write_at (frame->file,frame->kpage,frame->page_read_bytes,frame->ofs); 
-               //printf("%d\n",n);             
+	       file_write_at (frame->file,frame->kpage,frame->page_read_bytes,frame->ofs);              
             }
          pagedir_clear_page(thread_current()->pagedir,mmap->spt->upage);  
          }
@@ -560,7 +556,7 @@ void munmap(mapid_t mapid)
          frame_free(frame);
          list_remove(&mmap->elem);
          struct file_elem *fe=find_mapped_file(mmap->file);
-         //printf("<8>\n");
+         printf("<8>\n");
          if(fe)
          {
             file_close(fe->file);
@@ -583,7 +579,7 @@ void munmap_all(void)
       struct frame_elem *frame=mmap->spt->frame;
       if(frame->load)
       {
-         if(pagedir_is_dirty(thread_current()->pagedir,mmap->spt->upage))
+         if(pagedir_is_dirty(thread_current()->pagedir,frame->kpage))
          {
 	    file_write_at (frame->file,frame->kpage,frame->page_read_bytes,frame->ofs);
          } 
@@ -591,7 +587,7 @@ void munmap_all(void)
       }
       spt_free(mmap->spt);
       frame_free(frame);    
-      struct file_elem *fe=find_mapped_file(mmap->file);
+      struct file_elem *fe=find_mapped_file(find_file(thread_current()->process,mmap->fd));
       if(fe)
       {
          list_remove(&fe->elem);

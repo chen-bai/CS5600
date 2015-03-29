@@ -29,8 +29,10 @@
 #include "threads/synch.h"
 #include <stdio.h>
 #include <string.h>
+#include <list.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -40,11 +42,7 @@
 
    - up or "V": increment the value (and wake up one waiting
      thread, if any). */
-struct lock_elem 
-  {
-    struct list_elem elem;              /* List element. */
-    struct lock *lock;         /* This semaphore. */
-  };
+
 void
 donate_lock(struct lock *lock, struct thread *cur)
 {
@@ -241,7 +239,8 @@ lock_acquire (struct lock *lock)
   donate_lock(lock,cur);
   intr_set_level (old_level);
   sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+  lock->holder=thread_current ();
+  ASSERT(list_next(&wait_lock.elem));
   list_remove(&wait_lock.elem);
   lock->priority = thread_current ()->original_priority;
   list_insert_ordered(&thread_current ()->lock_list,&lock->elem,lock_big,NULL);

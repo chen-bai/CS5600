@@ -6,7 +6,9 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
-
+#include "vm/frame.h"
+#include "vm/suppage.h"
+#include "userprog/process.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -36,14 +38,57 @@ page_fault (struct intr_frame *f)
 
   /* Count page faults. */
   page_fault_cnt++;
-
   /* Determine cause. */
-  //ASSERT(is_user_vaddr(fault_addr));
+  //printf("%u\n",fault_addr);
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-  if (user)
-      exit(-1);
+  //ASSERT(1==0);
+     if(!not_present||fault_addr >= PHYS_BASE || fault_addr <=(void *)0x08048000)
+     {
+        //printf("%u,%u\n",PHYS_BASE,fault_addr);
+        exit(-1);
+     }
+     const void *ptr=pagedir_get_page(thread_current()->pagedir,fault_addr);
+     if(!ptr)
+     {
+        //printf("here\n");
+        void *upage=pg_round_down(fault_addr);
+        struct sup_page_table *spt=find_spt(upage);
+        //printf("%u\n",spt);
+        if(spt)
+        {
+           bool success=load_back(spt);
+           if(!success)
+               exit(-1);
+           return;
+        }
+        else
+        {
+        if (fault_addr > (f->esp - 33))
+        {
+           //printf("GROW STACK\n");
+           void *kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+           while(!kpage)
+           {
+              //printf("<2>\n");
+              evict();
+              kpage=palloc_get_page(PAL_USER | PAL_ZERO);
+           }
+           bool sucess=install_frame (pg_round_down(fault_addr),kpage,true,NULL,SWAP,NULL,NULL);
+           //printf("%d\n",sucess);
+           if(sucess)
+           {
+              thread_current()->esp=pg_round_down(fault_addr);
+              return;
+           }
+           frame_destroy(kpage); 
+           exit(-1);
+        }
+        }
+     }
+  //return;
+  exit(-1);
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */

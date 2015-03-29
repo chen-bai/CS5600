@@ -4,7 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-
+#include "vm/frame.h"
+#include "vm/suppage.h"
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -96,6 +97,7 @@ struct thread
     struct list_elem elem;              /* List element. */
     struct list lock_list;
     struct list wait_lock_list;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -107,6 +109,11 @@ struct thread
     struct child_process_elem *process;
     struct list child_process_list;
     struct file *file;
+    void *esp;
+    struct list page_table;
+    struct list mmap_list;
+    int next_mapid;
+    struct list mmap_file_list;
   };
 
 /* If false (default), use round-robin scheduler.

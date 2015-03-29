@@ -11,6 +11,11 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
+#include "vm/suppage.h"
+#include "userprog/syscall.h"
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -106,6 +111,7 @@ thread_init (void)
   list_init (&all_list);
   list_init (&sleeping_list);
   sema_init (&sleep_sema,1);
+  frame_table_init();
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -320,6 +326,17 @@ thread_exit (void)
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
+  struct thread *cur = thread_current();
+  struct list_elem *e = list_begin(&cur->lock_list);
+
+  while (e != list_end (&cur->lock_list))
+    {
+      struct list_elem *next = list_next(e);
+      struct lock *lock = list_entry (e, struct lock, elem);
+      lock_release(lock);
+      list_remove(&lock->elem);
+      e = next;
+    }
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
@@ -523,9 +540,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->original_priority = priority;
+  t->next_mapid=1;
   list_init(&t->lock_list);
   list_init(&t->wait_lock_list);
   list_init(&t->child_process_list);
+  list_init(&t->mmap_list);
+  list_init(&t->mmap_file_list);
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
