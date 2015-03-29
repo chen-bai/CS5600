@@ -1,8 +1,0 @@
-FAIL
-Kernel panic in run: PANIC at ../../threads/synch.c:234 in lock_acquire(): assertion `!lock_held_by_current_thread (lock)' failed.
-Call stack: 0xc0028c0e 0xc0027abd 0x4c4c4120
-Translation of call stack:
-In kernel.o:
-0xc0028c0e: debug_panic (.../../lib/kernel/debug.c:38)
-0xc0027abd: memcpy (...ild/../../lib/string.c:16)
-0x4c4c4120: (unknown)
