@@ -7,6 +7,7 @@
 void
 test_main (void)
 {
+  printf("%u\n",test_main);
   *(int *) test_main = 0;
   fail ("writing the code segment succeeded");
 }

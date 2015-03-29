@@ -53,17 +53,18 @@ sort_chunks (void)
       CHECK ((handle = open ("buffer")) > 1, "open \"buffer\"");
       write (handle, buf1 + CHUNK_SIZE * i, CHUNK_SIZE);
       close (handle);
-
+      
       /* Sort with subprocess. */
       CHECK ((child = exec ("child-sort buffer")) != -1,
              "exec \"child-sort buffer\"");
       CHECK (wait (child) == 123, "wait for child-sort");
-
+      
       /* Read chunk back from file. */
       CHECK ((handle = open ("buffer")) > 1, "open \"buffer\"");
+      //ASSERT(0);
       read (handle, buf1 + CHUNK_SIZE * i, CHUNK_SIZE);
       close (handle);
-
+      
       quiet = false;
     }
 }

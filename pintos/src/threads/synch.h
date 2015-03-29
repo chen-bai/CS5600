@@ -25,7 +25,11 @@ struct lock
     struct list_elem elem;              /* List element. */
     int priority;
   };
-
+struct lock_elem 
+  {
+    struct list_elem elem;              /* List element. */
+    struct lock *lock;         /* This semaphore. */
+  };
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
 bool lock_try_acquire (struct lock *);

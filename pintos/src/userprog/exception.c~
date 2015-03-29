@@ -4,14 +4,20 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
+#include "userprog/syscall.h"
+#include "vm/frame.h"
+#include "vm/suppage.h"
+#include "userprog/process.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
-static void
+void
 page_fault (struct intr_frame *f) 
 {
+  //ASSERT(1==0);
   bool not_present;  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
@@ -32,15 +38,107 @@ page_fault (struct intr_frame *f)
 
   /* Count page faults. */
   page_fault_cnt++;
-
   /* Determine cause. */
+  printf("%u\n",fault_addr);
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-
+  //ASSERT(1==0);
+     if(!not_present||fault_addr >= PHYS_BASE || fault_addr <=(void *)0x08048000)
+     {
+        //printf("%u,%u\n",PHYS_BASE,fault_addr);
+        goto done;
+     }
+     const void *ptr=pagedir_get_page(thread_current()->pagedir,fault_addr);
+     if(!ptr)
+     {
+        //printf("here\n");
+        void *upage=pg_round_down(fault_addr);
+        struct sup_page_table *spt=find_spt(upage);
+        //printf("%u\n",spt);
+        if(spt)
+        {
+           bool success=load_back(spt);
+           if(!success)
+               exit(-1);
+           return;
+        }
+        else
+        {
+        if (fault_addr > (f->esp - 33))
+        {
+           //printf("GROW STACK\n");
+           void *kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+           while(!kpage)
+           {
+              //printf("<2>\n");
+              evict();
+              kpage=palloc_get_page(PAL_USER | PAL_ZERO);
+           }
+           bool sucess=install_frame (pg_round_down(fault_addr),kpage,true,NULL,SWAP,NULL,NULL);
+           //printf("%d\n",sucess);
+           if(sucess)
+           {
+              thread_current()->esp=pg_round_down(fault_addr);
+              return;
+           }
+           frame_destroy(kpage); 
+           exit(-1);
+        }
+        }
+     }
+  //return;
+  //exit(-1);
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
+done:
+     printf("<2>\n");
+     struct sup_page_table *spt=find_page(pg_round_down(fault_addr));
+     if(!spt)
+     {
+        lock_release(&frame_lock);
+        exit(-1);
+     }
+     if(!spt->frame->shared)
+     {
+        lock_release(&frame_lock);
+        exit(-1);
+     }
+     if(frame_lock.holder!=thread_current())
+        lock_acquire(&frame_lock);
+     void *kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+     while(!kpage)
+     {
+              //printf("<2>\n");
+        evict();
+        kpage=palloc_get_page(PAL_USER | PAL_ZERO);
+     }
+     printf("<3>\n");
+     pagedir_clear_page(spt->thread->pagedir,spt->upage);
+     list_remove(&spt->felem);
+     struct frame_elem *frame=frame_table_insert(kpage,spt->frame->file,spt->frame->type,spt->frame->ofs,spt->frame->page_read_bytes,true);
+      if(list_empty(&spt->frame->shared->spt_list))
+      {
+         free(spt->frame->shared);
+         spt->frame->shared=NULL;
+      }
+      else if(spt->frame->spt==spt)
+      {
+         struct list_elem *e=list_begin(&spt->frame->shared->spt_list);
+         struct sup_page_table *page=list_entry(e,struct sup_page_table,felem);
+         spt->frame->spt=page;
+      }
+     frame_free(spt->frame);
+     spt->frame=frame;
+     bool success=install_page(spt->upage,kpage,true);
+     lock_release(&frame_lock);
+     if(!success)
+     {
+        frame_destroy(kpage);
+        exit(-1);
+     }
+     return;
   printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
@@ -128,7 +226,7 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n",
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      thread_exit (); 
+      thread_exit(); 
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.

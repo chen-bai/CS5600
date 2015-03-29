@@ -1,3 +1,8 @@
+#include <inttypes.h>
+#include <stdio.h>
+#include "userprog/gdt.h"
+#include "threads/interrupt.h"
+#include "threads/thread.h"
 #ifndef USERPROG_EXCEPTION_H
 #define USERPROG_EXCEPTION_H
 

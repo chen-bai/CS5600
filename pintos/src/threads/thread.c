@@ -11,6 +11,11 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
+#include "vm/suppage.h"
+#include "userprog/syscall.h"
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -106,6 +111,7 @@ thread_init (void)
   list_init (&all_list);
   list_init (&sleeping_list);
   sema_init (&sleep_sema,1);
+  frame_table_init();
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -216,6 +222,8 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
+  //printf("%d\n",tid);
+  t->parent=thread_current()->tid;
   t->process=create_child(tid);
   intr_set_level (old_level);
   
@@ -315,12 +323,20 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
-
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
-  if(thread_current()->process)
-     thread_current()->process->die=true;
+  struct thread *cur = thread_current();
+  struct list_elem *e = list_begin(&cur->lock_list);
+
+  while (e != list_end (&cur->lock_list))
+    {
+      struct list_elem *next = list_next(e);
+      struct lock *lock = list_entry (e, struct lock, elem);
+      lock_release(lock);
+      list_remove(&lock->elem);
+      e = next;
+    }
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
@@ -366,22 +382,11 @@ thread_foreach (thread_action_func *func, void *aux)
       func (t, aux);
     }
 }
-bool
-thread_exist(tid_t tid)
-{
-   struct list_elem *e;
-   for(e=list_begin(&all_list);e!=list_end(&all_list);e=list_next(e))
-   {
-      struct thread *t=list_entry (e,struct thread,allelem);
-      if(t->tid==tid)
-         return true;
-   }
-   return false;
-}
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void if_yield(void)
 {
+  list_sort(&ready_list,big,NULL);
    if (intr_context()&&!list_empty(&ready_list))
      {
       if (thread_current()->priority <list_entry(list_front(&ready_list),struct thread,elem)->priority||(++thread_ticks >= TIME_SLICE))
@@ -390,7 +395,6 @@ void if_yield(void)
          }
       return;
       }
-  list_sort(&ready_list,big,NULL);
   if((!list_empty(&ready_list))&&(thread_current()->priority<list_entry(list_front(&ready_list),struct thread,elem)->priority)){
 	thread_yield();}
   return;
@@ -536,8 +540,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->original_priority = priority;
+  t->next_mapid=1;
   list_init(&t->lock_list);
   list_init(&t->wait_lock_list);
+  list_init(&t->child_process_list);
+  list_init(&t->mmap_list);
+  list_init(&t->mmap_file_list);
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
@@ -613,6 +621,19 @@ thread_schedule_tail (struct thread *prev)
       ASSERT (prev != cur);
       palloc_free_page (prev);
     }
+}
+bool
+thread_exist(tid_t tid)
+{
+   struct list_elem *e=list_begin(&all_list);
+   while(e!=list_end(&all_list))
+   {
+      struct thread *t=list_entry (e,struct thread,allelem);
+      if(t->tid==tid)
+         return true;
+      e=list_next(e);
+   }
+   return false;
 }
 
 /* Schedules a new process.  At entry, interrupts must be off and
