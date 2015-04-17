@@ -113,7 +113,6 @@ struct thread
     struct list page_table;
     struct list mmap_list;
     int next_mapid;
-    struct list mmap_file_list;
   };
 
 /* If false (default), use round-robin scheduler.

@@ -545,7 +545,6 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->wait_lock_list);
   list_init(&t->child_process_list);
   list_init(&t->mmap_list);
-  list_init(&t->mmap_file_list);
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
