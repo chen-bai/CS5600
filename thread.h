@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "vm/frame.h"
 #include "vm/suppage.h"
+#include "filesys/directory.h"
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -110,9 +112,12 @@ struct thread
     struct list child_process_list;
     struct file *file;
     void *esp;
+#ifdef VM
     struct list page_table;
     struct list mmap_list;
     int next_mapid;
+#endif
+    struct dir *cur_dir;
   };
 
 /* If false (default), use round-robin scheduler.

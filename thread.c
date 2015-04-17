@@ -111,12 +111,15 @@ thread_init (void)
   list_init (&all_list);
   list_init (&sleeping_list);
   sema_init (&sleep_sema,1);
+#ifdef VM
   frame_table_init();
+#endif
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->cur_dir=NULL;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -225,11 +228,14 @@ thread_create (const char *name, int priority,
   //printf("%d\n",tid);
   t->parent=thread_current()->tid;
   t->process=create_child(tid);
+  if(thread_current()->cur_dir)
+     t->cur_dir=dir_reopen(thread_current()->cur_dir);
+  else
+     t->cur_dir=NULL;
   intr_set_level (old_level);
   
   /* Add to run queue. */
   thread_unblock (t);
-  //msg("<ub>");
   old_level = intr_disable ();
   if_yield();
   intr_set_level (old_level);
@@ -540,11 +546,14 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->original_priority = priority;
-  t->next_mapid=1;
   list_init(&t->lock_list);
   list_init(&t->wait_lock_list);
   list_init(&t->child_process_list);
+#ifdef VM
+  t->next_mapid=1;
   list_init(&t->mmap_list);
+  list_init(&t->page_table);
+#endif
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }

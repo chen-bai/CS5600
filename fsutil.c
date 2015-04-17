@@ -27,6 +27,7 @@ fsutil_ls (char **argv UNUSED)
   printf ("End of listing.\n");
 }
 
+
 /* Prints the contents of file ARGV[1] to the system console as
    hex and ASCII. */
 void
@@ -117,7 +118,7 @@ fsutil_extract (char **argv UNUSED)
           printf ("Putting '%s' into the file system...\n", file_name);
 
           /* Create destination file. */
-          if (!filesys_create (file_name, size))
+          if (!filesys_create (file_name, size,false))
             PANIC ("%s: create failed", file_name);
           dst = filesys_open (file_name);
           if (dst == NULL)
